@@ -1,0 +1,33 @@
+# Binaries (root-only; `pixelgo` without leading slash would match the
+# cmd/pixelgo/ source dir as well).
+/bin/
+/dist/
+/pixelgo
+*.exe
+
+# Go
+*.test
+*.out
+coverage.*
+
+# Env
+.env
+.env.local
+.env.production
+
+# DigitalOcean deploy artifacts (rendered specs contain secrets)
+.do/rendered-app.yaml
+.do/secrets.env
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Redis dump
+dump.rdb
+
+# Supabase CLI runtime state (project ref, pooler URL, etc.) — not secret,
+# but per-developer and regenerated on `supabase link`.
+supabase/.temp/

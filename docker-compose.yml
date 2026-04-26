@@ -1,0 +1,65 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: pixelgo-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - pixelgo-redis-data:/data
+    restart: unless-stopped
+
+  # Opt-in "full stack" service for smoke-testing the container build locally.
+  # `docker compose --profile app up` brings up redis + pixelgo together.
+  # `make redis-up` still brings up only redis.
+  pixelgo:
+    profiles: ["app"]
+    build:
+      context: .
+    container_name: pixelgo
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      PIXELGO_REDIS_URL: redis://redis:6379/0
+    # Host port is overridable so machines where 8080 is already taken
+    # (Docker Desktop itself publishes on it in some setups) can run:
+    #   PIXELGO_HOST_PORT=8081 docker compose --profile app up
+    ports:
+      - "${PIXELGO_HOST_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  # Hot-reload dev service. `docker compose --profile dev up` mounts the repo
+  # read-only into a golang container and runs `go run ./cmd/pixelgo` with
+  # PIXELGO_TEMPLATES_DIR pointed at the mounted templates, so edits to
+  # web/templates/*.html are visible on the next request — no rebuild needed.
+  # Go code changes still require the service to restart (Ctrl+C / `up` again).
+  pixelgo-dev:
+    profiles: ["dev"]
+    image: golang:1.25-alpine
+    container_name: pixelgo-dev
+    working_dir: /src
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      PIXELGO_REDIS_URL: redis://redis:6379/0
+      PIXELGO_TEMPLATES_DIR: /src/web/templates
+      # Keep module + build caches warm across restarts.
+      GOCACHE: /root/.cache/go-build
+      GOMODCACHE: /go/pkg/mod
+    command: ["sh", "-c", "go run ./cmd/pixelgo"]
+    volumes:
+      - .:/src
+      - pixelgo-dev-gomod:/go/pkg/mod
+      - pixelgo-dev-gocache:/root/.cache/go-build
+    ports:
+      - "${PIXELGO_HOST_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  pixelgo-redis-data:
+  pixelgo-dev-gomod:
+  pixelgo-dev-gocache:

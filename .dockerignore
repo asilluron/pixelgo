@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.vscode
+bin/
+dist/
+*.test
+*.out
+coverage.*
+.env
+.env.local
+dump.rdb
+supabase/.temp/

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-950 scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>pixelgo — high-throughput 1x1 tracking pixel for Go</title>
+  <meta name="description" content="pixelgo is a single-purpose, high-throughput 1x1 tracking pixel built on Go 1.25 and pipelined Redis INCR. Embed a pixel, get a versioned JSON API, an admin UI, and Supabase-backed organizations." />
+  <meta name="keywords" content="tracking pixel, 1x1 pixel, email tracking, open tracking, Go tracking pixel, Redis tracking, pixelgo, analytics pixel, lightweight tracking" />
+  <meta name="author" content="pixelgo" />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="canonical" href="/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="pixelgo" />
+  <meta property="og:title" content="pixelgo — high-throughput 1x1 tracking pixel" />
+  <meta property="og:description" content="A single-purpose tracking pixel with a versioned JSON API and admin UI. Built on Go 1.25 and pipelined Redis INCR." />
+  <meta property="og:url" content="/" />
+  <meta property="og:image" content="/static/og.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="pixelgo — high-throughput tracking pixel built on Go 1.25 and Redis" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="pixelgo — high-throughput 1x1 tracking pixel" />
+  <meta name="twitter:description" content="Embed one pixel. Get instant counts via a versioned JSON API. Powered by Go 1.25 and Redis." />
+  <meta name="twitter:image" content="/static/og.png" />
+  <meta name="twitter:image:alt" content="pixelgo — high-throughput tracking pixel" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "/#org",
+        "name": "pixelgo",
+        "url": "/",
+        "logo": "/static/og.png",
+        "description": "Single-purpose 1×1 tracking pixel with a versioned JSON API, admin UI, and Supabase-backed organizations."
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "pixelgo",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Cross-platform (server)",
+        "url": "/",
+        "image": "/static/og.png",
+        "description": "High-throughput 1×1 tracking pixel built on Go 1.25 with pipelined Redis INCR. Includes versioned /api/v1 JSON API and an admin UI.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "publisher": { "@id": "/#org" }
+      }
+    ]
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            display: ['Orbitron', '"Space Grotesk"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .gradient-text {
+      background-image: linear-gradient(120deg, #f87171 0%, #ffffff 50%, #818cf8 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero-aurora {
+      background:
+        radial-gradient(60% 50% at 15% 10%, rgba(220,38,38,0.25) 0%, transparent 60%),
+        radial-gradient(55% 45% at 85% 20%, rgba(255,255,255,0.08) 0%, transparent 60%),
+        radial-gradient(70% 60% at 50% 100%, rgba(67,56,202,0.45) 0%, transparent 65%);
+    }
+    .stripe-divider {
+      background: linear-gradient(90deg, #dc2626 0%, #dc2626 33%, #ffffff 33%, #ffffff 66%, #4338ca 66%, #4338ca 100%);
+    }
+    .cta-glow { box-shadow: 0 0 0 1px rgba(255,255,255,0.15), 0 10px 40px -10px rgba(220,38,38,0.55), 0 10px 40px -10px rgba(67,56,202,0.55); }
+  </style>
+</head>
+<body class="h-full text-slate-100 font-sans antialiased selection:bg-indigo-500/40">
+  <header class="relative z-10">
+    <nav class="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between" aria-label="Primary">
+      <a href="/" class="flex items-center gap-2">
+        <span class="inline-block h-3 w-3 rounded-sm bg-gradient-to-br from-red-500 via-white to-indigo-500"></span>
+        <span class="font-display font-bold tracking-[0.2em] text-sm uppercase">pixelgo</span>
+      </a>
+      <div class="flex items-center gap-3 text-sm">
+        <a href="/docs" class="hidden sm:inline text-slate-300 hover:text-white">API docs</a>
+        <a href="/login" class="text-slate-300 hover:text-white">Sign in</a>
+        <a href="/signup" class="rounded-md border border-slate-700 bg-slate-900/60 hover:bg-slate-800 px-3 py-1.5 font-medium">Get started</a>
+      </div>
+    </nav>
+    <div class="h-px stripe-divider opacity-60"></div>
+  </header>
+
+  <main>
+    <section class="relative overflow-hidden">
+      <div class="hero-aurora absolute inset-0 -z-10"></div>
+      <div class="max-w-6xl mx-auto px-6 pt-20 pb-28 text-center">
+        <p class="font-display text-xs tracking-[0.35em] uppercase text-indigo-300/80 mb-6">Go&nbsp;1.25 &middot; Redis &middot; Supabase</p>
+        <h1 class="font-display font-black text-5xl sm:text-6xl md:text-7xl leading-[1.05] tracking-tight">
+          <span class="gradient-text">One pixel.</span><br />
+          <span class="text-white">Built for the hot&nbsp;path.</span>
+        </h1>
+        <p class="mt-6 max-w-2xl mx-auto text-lg text-slate-300">
+          pixelgo is a single-purpose 1&times;1 tracking pixel that returns in microseconds and counts in
+          Redis. Drop one <code class="font-mono text-indigo-300">&lt;img&gt;</code> tag in your email or page and read the numbers from a versioned JSON API.
+        </p>
+        <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <a href="/signup" class="cta-glow group inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-red-600 via-rose-600 to-indigo-600 hover:from-red-500 hover:via-rose-500 hover:to-indigo-500 px-7 py-3.5 text-base font-semibold text-white">
+            Start tracking free
+            <span aria-hidden="true" class="transition-transform group-hover:translate-x-0.5">&rarr;</span>
+          </a>
+          <a href="/docs" class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 hover:bg-slate-800 px-6 py-3.5 text-base font-medium text-slate-200">
+            Read the API docs
+          </a>
+        </div>
+        <p class="mt-6 text-xs text-slate-500">No credit card &middot; embed in seconds &middot; OSS-friendly</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="speed-heading" class="border-t border-slate-900/80 bg-slate-950">
+      <div class="max-w-6xl mx-auto px-6 py-20">
+        <div class="grid md:grid-cols-3 gap-6">
+          <article class="rounded-2xl p-6 bg-gradient-to-br from-red-950/60 via-slate-900 to-slate-900 border border-red-900/40">
+            <p class="font-display text-[11px] tracking-[0.3em] uppercase text-red-300/90">Speed</p>
+            <h2 id="speed-heading" class="mt-2 text-2xl font-display font-bold text-white">Built for the hot path</h2>
+            <p class="mt-3 text-slate-300 text-sm leading-relaxed">
+              Go&nbsp;1.25 serves the <code class="font-mono text-red-300">/p/:id</code> route with a fixed 43-byte GIF and a
+              <strong class="text-white">pipelined Redis <span class="font-mono">INCR</span></strong>, keeping per-hit work to a single round trip and zero allocations on the response body.
+            </p>
+            <ul class="mt-4 space-y-1.5 text-sm text-slate-400">
+              <li>&middot; Microsecond-class response times</li>
+              <li>&middot; Per-IP rate limiting on the edge</li>
+              <li>&middot; Logger skipped on the pixel route</li>
+            </ul>
+          </article>
+
+          <article class="rounded-2xl p-6 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-900 border border-slate-700">
+            <p class="font-display text-[11px] tracking-[0.3em] uppercase text-slate-200">Simplicity</p>
+            <h2 class="mt-2 text-2xl font-display font-bold text-white">One pixel, one job</h2>
+            <p class="mt-3 text-slate-300 text-sm leading-relaxed">
+              A single 1&times;1 transparent pixel. No SDK, no cookies, no JavaScript. Embed it anywhere an
+              <code class="font-mono text-slate-200">&lt;img&gt;</code> tag works &mdash; emails, docs, README files, status pages.
+            </p>
+            <pre class="mt-4 rounded-md bg-slate-950 border border-slate-800 p-3 text-[12px] text-slate-300 overflow-x-auto"><code>&lt;img src="https://your.host/p/abc123"
+     width="1" height="1" alt="" /&gt;</code></pre>
+          </article>
+
+          <article class="rounded-2xl p-6 bg-gradient-to-br from-indigo-950/70 via-slate-900 to-slate-900 border border-indigo-900/50">
+            <p class="font-display text-[11px] tracking-[0.3em] uppercase text-indigo-300/90">Features</p>
+            <h2 class="mt-2 text-2xl font-display font-bold text-white">Batteries included</h2>
+            <ul class="mt-3 space-y-2 text-sm text-slate-300">
+              <li><strong class="text-white">Admin UI</strong> &mdash; create pixels, invite teammates, mint API keys.</li>
+              <li><strong class="text-white">Supabase orgs</strong> &mdash; multi-tenant accounts with role-based access.</li>
+              <li><strong class="text-white">Versioned JSON API</strong> &mdash; <code class="font-mono text-indigo-300">/api/v1</code> with stats, time series, and bulk endpoints.</li>
+              <li><strong class="text-white">OpenAPI 3 spec</strong> &mdash; published at <a href="/openapi.yaml" class="text-indigo-300 hover:text-indigo-200 underline-offset-2 hover:underline">/openapi.yaml</a>.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="cta-heading" class="relative border-t border-slate-900/80">
+      <div class="hero-aurora absolute inset-0 -z-10 opacity-70"></div>
+      <div class="max-w-3xl mx-auto px-6 py-20 text-center">
+        <h2 id="cta-heading" class="font-display font-black text-3xl sm:text-4xl text-white">Ship a pixel in the next five minutes.</h2>
+        <p class="mt-4 text-slate-300">Spin up an org, create a pixel, paste the tag. The counter starts moving immediately.</p>
+        <a href="/signup" class="cta-glow mt-8 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-red-600 via-rose-600 to-indigo-600 hover:from-red-500 hover:via-rose-500 hover:to-indigo-500 px-7 py-3.5 text-base font-semibold text-white">
+          Create your account
+          <span aria-hidden="true">&rarr;</span>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-900/80">
+    <div class="h-px stripe-divider opacity-50"></div>
+    <div class="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+      <p>&copy; pixelgo &middot; high-throughput tracking pixel</p>
+      <nav class="flex items-center gap-4" aria-label="Footer">
+        <a href="/docs" class="hover:text-slate-300">API docs</a>
+        <a href="/login" class="hover:text-slate-300">Sign in</a>
+        <a href="/signup" class="hover:text-slate-300">Get started</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

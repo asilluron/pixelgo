@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>pixelgo — create account</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-full flex items-center justify-center text-slate-100">
+  <main class="w-full max-w-sm p-8 bg-slate-900 rounded-2xl shadow-xl border border-slate-800">
+    <h1 class="text-2xl font-semibold mb-1">pixelgo</h1>
+    <p class="text-sm text-slate-400 mb-6">
+      {{ if .InviteToken }}
+        Accept invite &mdash; step 1 of 1
+      {{ else }}
+        Create your account &mdash; step 1 of 2
+      {{ end }}
+    </p>
+
+    {{ if .InviteToken }}
+    <div class="mb-4 rounded-md bg-indigo-950 border border-indigo-800 px-3 py-2 text-sm text-indigo-100">
+      You're joining <span class="font-semibold">{{ .InviteOrg }}</span>
+      as <span class="font-mono">{{ .InviteRole }}</span>.
+    </div>
+    {{ end }}
+
+    {{ if .Error }}
+    <div class="mb-4 rounded-md bg-red-950 border border-red-800 px-3 py-2 text-sm text-red-200">
+      {{ if eq .Error "exists" }}An account with that email already exists.{{ end }}
+      {{ if eq .Error "missing" }}Please enter both email and password.{{ end }}
+      {{ if eq .Error "invite" }}That invite link is invalid or expired.{{ end }}
+      {{ if eq .Error "confirm" }}Account created but not auto-confirmed. Check your email.{{ end }}
+    </div>
+    {{ end }}
+
+    <form method="post" action="/signup" class="space-y-4">
+      {{ if .InviteToken }}
+      <input type="hidden" name="invite" value="{{ .InviteToken }}" />
+      {{ end }}
+      <label class="block">
+        <span class="text-sm text-slate-300">Email</span>
+        <input type="email" name="email" required autofocus
+          value="{{ .InviteEmail }}"
+          class="mt-1 w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-sm text-slate-300">Password</span>
+        <input type="password" name="password" required minlength="6"
+          class="mt-1 w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </label>
+      <button type="submit"
+        class="w-full rounded-md bg-indigo-600 hover:bg-indigo-500 px-3 py-2 text-sm font-medium">
+        {{ if .InviteToken }}Accept &amp; create account{{ else }}Continue{{ end }}
+      </button>
+    </form>
+
+    <p class="mt-4 text-xs text-slate-500">
+      Already have an account?
+      <a href="/login" class="text-indigo-400 hover:text-indigo-300">Sign in</a>.
+    </p>
+  </main>
+</body>
+</html>

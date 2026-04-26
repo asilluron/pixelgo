@@ -1,0 +1,64 @@
+# DigitalOcean App Platform spec — rendered by scripts/do-deploy.sh via
+# envsubst. This template is safe to commit; all ${VAR} placeholders are
+# replaced at deploy time from the local .env + .do/secrets.env. The
+# rendered copy lands at .do/rendered-app.yaml and is gitignored.
+name: pixelgo
+region: sfo
+
+services:
+  - name: web
+    # Pulled from DigitalOcean Container Registry. The deploy script builds
+    # a linux/amd64 image and pushes it to the `pixelgo` repo on every run;
+    # `deploy_on_push` means DOCR push alone triggers a rollout so
+    # `make do-deploy` after the first bootstrap is just build + push.
+    image:
+      registry_type: DOCR
+      repository: pixelgo
+      tag: latest
+      deploy_on_push:
+        enabled: true
+
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+
+    # /healthz touches Redis + Postgres. If either is unreachable the
+    # endpoint returns 503, which makes App Platform pull the instance
+    # out of rotation rather than serving 500s to real traffic.
+    health_check:
+      http_path: /healthz
+      initial_delay_seconds: 15
+      period_seconds: 15
+      timeout_seconds: 5
+      failure_threshold: 3
+
+    envs:
+      - { key: PIXELGO_ENV,                value: "production",               scope: RUN_TIME }
+      - { key: PIXELGO_ADDR,               value: ":8080",                    scope: RUN_TIME }
+      - { key: PIXELGO_SESSION_TTL,        value: "168h",                     scope: RUN_TIME }
+      - { key: PIXELGO_RL_PER_SEC,         value: "${PIXELGO_RL_PER_SEC}",    scope: RUN_TIME }
+      - { key: PIXELGO_RL_BURST,           value: "${PIXELGO_RL_BURST}",      scope: RUN_TIME }
+      - { key: PIXELGO_BOOTSTRAP_EMAIL,    value: "${PIXELGO_BOOTSTRAP_EMAIL}", scope: RUN_TIME }
+
+      - { key: PIXELGO_SESSION_SECRET,     value: "${PIXELGO_SESSION_SECRET}",     scope: RUN_TIME, type: SECRET }
+      - { key: PIXELGO_BOOTSTRAP_PASSWORD, value: "${PIXELGO_BOOTSTRAP_PASSWORD}", scope: RUN_TIME, type: SECRET }
+      - { key: PIXELGO_REDIS_URL,          value: "${PIXELGO_REDIS_URL}",          scope: RUN_TIME, type: SECRET }
+
+      - { key: SUPABASE_URL,               value: "${SUPABASE_URL}",               scope: RUN_TIME }
+      - { key: SUPABASE_PROJECT_REF,       value: "${SUPABASE_PROJECT_REF}",       scope: RUN_TIME }
+      - { key: SUPABASE_ANON_KEY,          value: "${SUPABASE_ANON_KEY}",          scope: RUN_TIME, type: SECRET }
+      - { key: SUPABASE_SERVICE_ROLE_KEY,  value: "${SUPABASE_SERVICE_ROLE_KEY}",  scope: RUN_TIME, type: SECRET }
+      - { key: SUPABASE_DB_URL,            value: "${SUPABASE_DB_URL}",            scope: RUN_TIME, type: SECRET }
+
+# Custom domains. Apex (pixelgo.cloud) requires either DO-managed DNS or
+# an ALIAS/ANAME record at your registrar. www uses a plain CNAME.
+# Certificates are issued automatically by Let's Encrypt once DNS resolves.
+domains:
+  - domain: pixelgo.cloud
+    type: PRIMARY
+  - domain: www.pixelgo.cloud
+    type: ALIAS
+
+# Egress allowlist for outbound calls is unnecessary — the app talks to
+# Supabase (HTTPS) and managed Valkey (TLS) which DO routes privately
+# when both resources live in the same region/VPC.

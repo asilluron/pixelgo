@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>pixelgo — admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+          defer></script>
+</head>
+<body class="min-h-full text-slate-100">
+  <header class="border-b border-slate-800 bg-slate-900">
+    <div class="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
+      <div class="flex items-baseline gap-3">
+        <h1 class="text-xl font-semibold">pixelgo</h1>
+        <span class="text-xs text-slate-400">admin</span>
+      </div>
+      <div class="flex items-center gap-3 text-sm text-slate-300">
+        <span>{{ .User.Email }}</span>
+        <span class="px-2 py-0.5 rounded-full text-xs border border-slate-700 bg-slate-800">
+          {{ if .IsSuper }}super_admin{{ else }}{{ .User.Role }}{{ end }}
+        </span>
+        <form method="post" action="/logout">
+          <button class="text-slate-400 hover:text-white text-sm">Sign out</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-8 space-y-10">
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <h2 class="text-xs uppercase tracking-wide text-slate-400">All-time views</h2>
+        <p class="mt-1 text-3xl font-semibold tabular-nums">{{ commas .TotalViews }}</p>
+      </div>
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <h2 class="text-xs uppercase tracking-wide text-slate-400">Today (UTC)</h2>
+        <p class="mt-1 text-3xl font-semibold tabular-nums">{{ commas .TodayViews }}</p>
+      </div>
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <h2 class="text-xs uppercase tracking-wide text-slate-400">This hour (UTC)</h2>
+        <p class="mt-1 text-3xl font-semibold tabular-nums">{{ commas .HourViews }}</p>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold mb-4">Pixels</h2>
+      {{ if not .Stats }}
+        <p class="text-sm text-slate-400">
+          {{ if .CanEdit }}No pixels yet. Create one below.{{ else }}No pixels yet.{{ end }}
+        </p>
+      {{ else }}
+      {{ $host := .Host }}{{ $scheme := .Scheme }}{{ $names := .OrgNames }}
+      <div class="space-y-4">
+        {{ range .Stats }}
+        <article class="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+          <div class="flex flex-wrap items-start gap-x-6 gap-y-3 px-5 py-4 border-b border-slate-800">
+            <div class="flex-1 min-w-[14rem]">
+              <div class="font-medium">{{ .Pixel.Name }}</div>
+              <div class="text-xs text-slate-500 font-mono truncate">{{ .Pixel.ID }}</div>
+              {{ if $.IsSuper }}
+              <div class="text-xs text-slate-400 mt-1">{{ index $names .Pixel.OrgID }}</div>
+              {{ end }}
+              <div class="hidden md:block text-xs text-slate-500 font-mono truncate mt-1"
+                   title="{{ $scheme }}://{{ $host }}/p/{{ .Pixel.ID }}">
+                {{ $scheme }}://{{ $host }}/p/{{ .Pixel.ID }}
+              </div>
+            </div>
+            <div class="flex gap-5 text-right tabular-nums">
+              <div>
+                <div class="text-[10px] uppercase tracking-wide text-slate-500">Hour</div>
+                <div class="text-sm text-slate-300">{{ commas .LastHour }}</div>
+              </div>
+              <div>
+                <div class="text-[10px] uppercase tracking-wide text-slate-500">Today</div>
+                <div class="text-sm text-slate-300">{{ commas .Today }}</div>
+              </div>
+              <div>
+                <div class="text-[10px] uppercase tracking-wide text-slate-500">All-time</div>
+                <div class="text-lg font-semibold">{{ commas .Total }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-slate-950 px-5 py-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex gap-2" role="tablist" aria-label="Time range">
+                <button type="button" data-tab="daily" data-pixel="{{ .Pixel.ID }}"
+                        role="tab" aria-selected="true"
+                        class="px-3 py-1 rounded-md text-xs border border-indigo-500
+                               bg-indigo-600/20 text-indigo-200">Daily (7d)</button>
+                <button type="button" data-tab="hourly" data-pixel="{{ .Pixel.ID }}"
+                        role="tab" aria-selected="false"
+                        class="px-3 py-1 rounded-md text-xs border border-slate-700
+                               text-slate-300 hover:border-slate-500">Hourly (24h)</button>
+              </div>
+              <span class="text-[10px] uppercase tracking-wide text-slate-500"
+                    data-chart-caption="{{ .Pixel.ID }}">Views per day · last 7 days</span>
+            </div>
+            <div class="relative h-64 sm:h-72" data-chart-container="{{ .Pixel.ID }}">
+              <canvas data-canvas="{{ .Pixel.ID }}" aria-label="Views chart"></canvas>
+            </div>
+          </div>
+        </article>
+        {{ end }}
+      </div>
+      {{ end }}
+    </section>
+
+    {{ if or .IsOwner .IsSuper }}
+    <section class="rounded-xl border border-slate-800 bg-slate-900 p-6">
+      <h2 class="text-lg font-semibold mb-1">Invite a teammate</h2>
+      <p class="text-xs text-slate-400 mb-4">
+        Generates a one-time link. Share it yourself — pixelgo doesn't send email.
+      </p>
+      <form method="post" action="/admin/invites" class="flex flex-wrap gap-2">
+        <input name="email" type="email" placeholder="teammate@example.com" required
+          class="flex-1 min-w-[14rem] rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <select name="role" required
+          class="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="editor">editor (can create pixels)</option>
+          <option value="viewer">viewer (read-only)</option>
+        </select>
+        {{ if .IsSuper }}
+        <select name="org_id" required
+          class="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          {{ if gt (len .Orgs) 1 }}<option value="">Select org…</option>{{ end }}
+          {{ $uOrg := .User.OrgID }}{{ $only := eq (len .Orgs) 1 }}
+          {{ range .Orgs }}
+          <option value="{{ .ID }}" {{ if or $only (eq .ID $uOrg) }}selected{{ end }}>{{ .Name }}</option>
+          {{ end }}
+        </select>
+        {{ end }}
+        <button class="rounded-md bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-medium">Create invite</button>
+      </form>
+
+      {{ if .InviteLinks }}
+      <div class="mt-5 space-y-2">
+        <h3 class="text-xs uppercase tracking-wide text-slate-400">Outstanding invites</h3>
+        {{ range .InviteLinks }}
+        <div class="flex items-center gap-3 rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-xs">
+          <span class="text-slate-300">{{ .Email }}</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px] border border-slate-700 bg-slate-800">{{ .Role }}</span>
+          <input readonly value="{{ .URL }}"
+            onclick="this.select()"
+            class="flex-1 min-w-0 bg-transparent text-slate-400 font-mono text-[11px] focus:outline-none" />
+        </div>
+        {{ end }}
+      </div>
+      {{ end }}
+    </section>
+    {{ end }}
+
+    {{ if .CanEdit }}
+    <section class="rounded-xl border border-slate-800 bg-slate-900 p-6">
+      <h2 class="text-lg font-semibold mb-4">Create pixel</h2>
+      <form method="post" action="/admin/pixels" class="flex flex-wrap gap-2">
+        <input name="name" placeholder="Homepage hero" required
+          class="flex-1 min-w-[12rem] rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        {{ if .IsSuper }}
+        <select name="org_id" required
+          class="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          {{ if gt (len .Orgs) 1 }}<option value="">Select org…</option>{{ end }}
+          {{ $uOrg := .User.OrgID }}{{ $only := eq (len .Orgs) 1 }}
+          {{ range .Orgs }}
+          <option value="{{ .ID }}" {{ if or $only (eq .ID $uOrg) }}selected{{ end }}>{{ .Name }}</option>
+          {{ end }}
+        </select>
+        {{ end }}
+        <button class="rounded-md bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-medium">Create</button>
+      </form>
+    </section>
+    {{ end }}
+
+    <section class="rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-4">
+      <div class="flex items-baseline justify-between">
+        <h2 class="text-lg font-semibold">API keys</h2>
+        <a href="https://github.com/asilluron/pixelgo#api" class="text-xs text-slate-400 hover:text-slate-200">docs →</a>
+      </div>
+
+      {{ if .NewKey }}
+      <div class="rounded-lg border border-emerald-700 bg-emerald-950/40 p-4">
+        <p class="text-sm text-emerald-300 font-medium">New key — copy it now, it won't be shown again.</p>
+        <code class="block mt-2 text-xs font-mono text-emerald-100 break-all select-all">{{ .NewKey }}</code>
+      </div>
+      {{ end }}
+
+      <form method="post" action="/admin/api-keys" class="flex flex-wrap items-end gap-3">
+        <label class="flex flex-col gap-1 text-xs text-slate-400">
+          <span>Name</span>
+          <input name="name" required placeholder="my laptop"
+                 class="rounded-md bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-slate-100" />
+        </label>
+        <label class="flex flex-col gap-1 text-xs text-slate-400">
+          <span>Type</span>
+          <select name="type" class="rounded-md bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-slate-100">
+            <option value="personal">Personal</option>
+            {{ if or .IsOwner .IsSuper }}<option value="org">Org</option>{{ end }}
+          </select>
+        </label>
+        <button class="rounded-md bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-sm font-medium">Create key</button>
+      </form>
+
+      {{ if or .PersonalKeys .OrgAPIKeys }}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-slate-400 text-left text-xs uppercase tracking-wide">
+            <tr>
+              <th class="py-2 pr-4 font-medium">Name</th>
+              <th class="py-2 pr-4 font-medium">Type</th>
+              <th class="py-2 pr-4 font-medium">Prefix</th>
+              <th class="py-2 pr-4 font-medium">Last used</th>
+              <th class="py-2 pr-4 font-medium">Status</th>
+              <th class="py-2 pr-4"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {{ range .PersonalKeys }}{{ template "apikey_row" . }}{{ end }}
+            {{ range .OrgAPIKeys }}{{ template "apikey_row" . }}{{ end }}
+          </tbody>
+        </table>
+      </div>
+      {{ end }}
+    </section>
+
+    {{ define "apikey_row" }}
+    <tr>
+      <td class="py-2 pr-4">{{ .Name }}</td>
+      <td class="py-2 pr-4 text-slate-400">{{ .Type }}</td>
+      <td class="py-2 pr-4 font-mono text-xs text-slate-300">{{ .Prefix }}…</td>
+      <td class="py-2 pr-4 text-slate-400 text-xs">{{ if .LastUsedAt }}{{ .LastUsedAt.Format "2006-01-02 15:04 UTC" }}{{ else }}never{{ end }}</td>
+      <td class="py-2 pr-4 text-xs">
+        {{ if .RevokedAt }}<span class="text-red-400">revoked</span>{{ else }}<span class="text-emerald-400">active</span>{{ end }}
+      </td>
+      <td class="py-2 pr-4 text-right">
+        {{ if not .RevokedAt }}
+        <form method="post" action="/admin/api-keys/{{ .ID }}/revoke" class="inline">
+          <button class="text-xs text-slate-400 hover:text-red-400">Revoke</button>
+        </form>
+        {{ end }}
+      </td>
+    </tr>
+    {{ end }}
+  </main>
+
+  <script>
+    // Server-rendered time-series data, keyed by pixel ID.
+    // html/template auto-escapes this as a JSON literal in a <script> context.
+    const CHART_DATA = {{ .ChartData }};
+
+    (function () {
+      // Indigo-500, matching the rest of the dashboard accents.
+      const ACCENT = '#6366f1';
+      const AXIS = '#94a3b8';
+      const GRID = 'rgba(30, 41, 59, 0.6)';
+
+      const charts = Object.create(null);
+
+      function build(pixelID, mode) {
+        const data = CHART_DATA && CHART_DATA[pixelID];
+        if (!data) return null;
+        const series = mode === 'hourly' ? data.hourly : data.daily;
+        const labels = (series && series.labels) || [];
+        const counts = (series && series.counts) || [];
+        const isBar = mode === 'hourly';
+        return {
+          type: isBar ? 'bar' : 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Views',
+              data: counts,
+              borderColor: ACCENT,
+              backgroundColor: isBar ? 'rgba(99,102,241,0.55)' : 'rgba(99,102,241,0.18)',
+              borderWidth: isBar ? 0 : 2,
+              borderRadius: 3,
+              tension: 0.3,
+              fill: !isBar,
+              pointRadius: isBar ? 0 : 2,
+              pointHoverRadius: isBar ? 0 : 4,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: '#0f172a',
+                titleColor: '#e2e8f0',
+                bodyColor: '#cbd5e1',
+                borderColor: '#1e293b',
+                borderWidth: 1,
+                padding: 10,
+                displayColors: false,
+              },
+            },
+            scales: {
+              x: { ticks: { color: AXIS, maxRotation: 0, autoSkip: true }, grid: { color: GRID } },
+              y: { ticks: { color: AXIS, precision: 0 }, grid: { color: GRID }, beginAtZero: true },
+            },
+          },
+        };
+      }
+
+      // Remember which mode each canvas is currently showing so resize events
+      // and re-renders don't reset the user's tab choice.
+      const modes = Object.create(null);
+
+      const CAPTIONS = {
+        daily: 'Views per day · last 7 days',
+        hourly: 'Views per hour · last 24 hours',
+      };
+
+      function render(pixelID, mode) {
+        const canvas = document.querySelector('[data-canvas="' + pixelID + '"]');
+        if (!canvas || typeof Chart === 'undefined') return;
+        if (charts[pixelID]) charts[pixelID].destroy();
+        const cfg = build(pixelID, mode);
+        if (cfg) charts[pixelID] = new Chart(canvas, cfg);
+        modes[pixelID] = mode;
+        const cap = document.querySelector('[data-chart-caption="' + pixelID + '"]');
+        if (cap) cap.textContent = CAPTIONS[mode] || '';
+      }
+
+      function setActiveTab(pixelID, mode) {
+        document
+          .querySelectorAll('[data-tab][data-pixel="' + pixelID + '"]')
+          .forEach(function (btn) {
+            const active = btn.dataset.tab === mode;
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+            btn.classList.toggle('border-indigo-500', active);
+            btn.classList.toggle('bg-indigo-600/20', active);
+            btn.classList.toggle('text-indigo-200', active);
+            btn.classList.toggle('border-slate-700', !active);
+            btn.classList.toggle('text-slate-300', !active);
+          });
+      }
+
+      document.querySelectorAll('[data-tab]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const id = btn.dataset.pixel;
+          const mode = btn.dataset.tab;
+          setActiveTab(id, mode);
+          render(id, mode);
+        });
+      });
+
+      // Lazy-init: only instantiate Chart.js once a card scrolls near the
+      // viewport. Keeps initial paint cheap for large dashboards while still
+      // making charts feel "always on" for the pixels a user actually looks at.
+      // Chart.js is loaded with `defer`, so wait for it before observing.
+      function startObserver() {
+        const containers = document.querySelectorAll('[data-chart-container]');
+        if (!('IntersectionObserver' in window)) {
+          containers.forEach(function (el) {
+            render(el.dataset.chartContainer, 'daily');
+          });
+          return;
+        }
+        const io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (!e.isIntersecting) return;
+            const id = e.target.dataset.chartContainer;
+            if (!charts[id]) render(id, 'daily');
+            io.unobserve(e.target);
+          });
+        }, { rootMargin: '200px 0px' });
+        containers.forEach(function (el) { io.observe(el); });
+      }
+
+      if (typeof Chart !== 'undefined') {
+        startObserver();
+      } else {
+        window.addEventListener('load', startObserver);
+      }
+    })();
+  </script>
+</body>
+</html>

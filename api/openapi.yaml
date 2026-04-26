@@ -1,0 +1,292 @@
+openapi: 3.1.0
+info:
+  title: pixelgo API
+  version: "1.0.0"
+  summary: Customer-facing JSON API for pixelgo.
+  description: |
+    Read-only v1. Authenticate with `Authorization: Bearer pxg_<kind>_<payload>`.
+    Successful responses are wrapped `{ "data": …, "meta": … }`. Errors use
+    `{ "error": { "code": "…", "message": "…", "details": … } }` with a
+    stable machine-readable `code`.
+servers:
+  - url: https://{host}/api
+    variables:
+      host:
+        default: example.com
+        description: Your pixelgo deployment.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/me:
+    get:
+      summary: Resolve the current token.
+      tags: [identity]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeEnvelope"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/org:
+    get:
+      summary: Org this token is scoped to.
+      tags: [identity]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgEnvelope"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/pixels:
+    get:
+      summary: List pixels owned by the caller's org.
+      tags: [pixels]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PixelListEnvelope"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/pixels/{id}:
+    get:
+      summary: Fetch a single pixel.
+      tags: [pixels]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PixelEnvelope"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/pixels/{id}/stats:
+    get:
+      summary: Current counters (lifetime / today / last hour).
+      tags: [pixels]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsEnvelope"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/pixels/{id}/timeseries:
+    get:
+      summary: Per-bucket counts.
+      description: |
+        Returns hourly (≤72 buckets) or daily (≤35 buckets) counts ending at
+        "now". Buckets older than the retention TTL are not available.
+      tags: [pixels]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: granularity
+          schema:
+            type: string
+            enum: [hour, day]
+            default: day
+        - in: query
+          name: window
+          description: Number of buckets. Clamped to retention TTL.
+          schema: { type: integer, minimum: 1, maximum: 72 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeseriesEnvelope"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/pixels:batchStats:
+    get:
+      summary: Bulk counters for up to 200 pixels.
+      tags: [pixels]
+      parameters:
+        - in: query
+          name: ids
+          required: true
+          description: Comma-separated pixel IDs.
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsListEnvelope"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: pxg_<kind>_<payload>
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable identifier.
+              enum:
+                - unauthorized
+                - forbidden
+                - not_found
+                - invalid_request
+                - internal_error
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+
+    Me:
+      type: object
+      properties:
+        key_id:    { type: string, format: uuid }
+        key_type:  { type: string, enum: [personal, org] }
+        key_name:  { type: string }
+        org_id:    { type: string, format: uuid }
+        user_id:   { type: string, format: uuid, nullable: true }
+        issued_at: { type: string, format: date-time }
+
+    Org:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        name:       { type: string }
+        created_at: { type: string, format: date-time }
+
+    Pixel:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        org_id:     { type: string, format: uuid }
+        name:       { type: string }
+        created_at: { type: string, format: date-time }
+
+    Stats:
+      type: object
+      properties:
+        pixel_id:  { type: string, format: uuid }
+        total:     { type: integer, format: int64 }
+        today:     { type: integer, format: int64 }
+        last_hour: { type: integer, format: int64 }
+
+    BucketPoint:
+      type: object
+      properties:
+        label: { type: string, description: "YYYYMMDD or YYYYMMDDHH in UTC" }
+        count: { type: integer, format: int64 }
+
+    ListMeta:
+      type: object
+      properties:
+        count: { type: integer }
+
+    # Envelopes
+    MeEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Me" }
+    OrgEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Org" }
+    PixelEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Pixel" }
+    PixelListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Pixel" }
+        meta: { $ref: "#/components/schemas/ListMeta" }
+    StatsEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Stats" }
+    StatsListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Stats" }
+        meta: { $ref: "#/components/schemas/ListMeta" }
+    TimeseriesEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/BucketPoint" }
+        meta:
+          type: object
+          properties:
+            pixel_id:    { type: string, format: uuid }
+            granularity: { type: string, enum: [hour, day] }
+            window:      { type: integer }
+            count:       { type: integer }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Caller may not access the requested resource.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such resource (or not owned by the caller's org).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
