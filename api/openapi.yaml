@@ -4,10 +4,16 @@ info:
   version: "1.0.0"
   summary: Customer-facing JSON API for pixelgo.
   description: |
-    Read-only v1. Authenticate with `Authorization: Bearer pxg_<kind>_<payload>`.
+    Authenticate with `Authorization: Bearer pxg_<kind>_<payload>`.
     Successful responses are wrapped `{ "data": …, "meta": … }`. Errors use
     `{ "error": { "code": "…", "message": "…", "details": … } }` with a
     stable machine-readable `code`.
+
+    Pixels can be created and deleted dynamically. Deletion is a soft
+    delete: the pixel disappears from live listings and stops counting
+    immediately, and its data is permanently expunged 30 days later.
+    Write endpoints require an org key or a personal key whose owner has
+    the owner/editor role; viewer keys are read-only.
 servers:
   - url: https://{host}/api
     variables:
@@ -48,8 +54,41 @@ paths:
 
   /v1/pixels:
     get:
-      summary: List pixels owned by the caller's org.
+      summary: List pixels owned by the caller's org (catalog).
+      description: |
+        Index-backed sort/filter/pagination built for orgs with thousands of
+        pixels. Ordering rules when filters apply: `q` implies name order,
+        `tag` implies created order, `status=deleted` orders by deletion
+        time. `q` and `tag` cannot be combined.
       tags: [pixels]
+      parameters:
+        - in: query
+          name: q
+          description: Case-insensitive name prefix filter. Implies name ordering.
+          schema: { type: string }
+        - in: query
+          name: tag
+          description: Exact tag filter. Implies created-at ordering.
+          schema: { type: string }
+        - in: query
+          name: status
+          description: Live pixels (default) or soft-deleted pixels pending expunge.
+          schema:
+            type: string
+            enum: [active, deleted]
+            default: active
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [created_desc, created_asc, name_asc, name_desc]
+            default: created_desc
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
       responses:
         "200":
           description: OK
@@ -57,7 +96,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PixelListEnvelope"
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Create a pixel dynamically.
+      description: |
+        Quick creation for tracking anything on the fly — e.g. mint one
+        pixel per product page at publish time. Only `name` is required;
+        `url` records the tracked page and `tags` power catalog filtering.
+        Requires an org key or an owner/editor personal key.
+      tags: [pixels]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePixelRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PixelEnvelope"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /v1/pixels/{id}:
     get:
@@ -76,6 +140,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/PixelEnvelope"
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Soft-delete a pixel.
+      description: |
+        The pixel disappears from live listings and stops counting hits
+        immediately. Its metadata and counters are retained for 30 days
+        (visible via `GET /v1/pixels?status=deleted`) and then permanently
+        expunged. Idempotent: deleting an already-deleted pixel returns its
+        current state. Requires an org key or an owner/editor personal key.
+      tags: [pixels]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Soft-deleted (or already deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PixelDeleteEnvelope"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /v1/pixels/{id}/stats:
@@ -203,7 +291,50 @@ components:
         id:         { type: string, format: uuid }
         org_id:     { type: string, format: uuid }
         name:       { type: string }
+        url:
+          type: string
+          format: uri
+          description: Optional tracked-page URL (e.g. a product page).
+        tags:
+          type: array
+          items: { type: string }
+          description: Optional lowercase tags for catalog filtering (max 10).
         created_at: { type: string, format: date-time }
+        deleted_at:
+          type: string
+          format: date-time
+          description: Present only on soft-deleted pixels.
+
+    CreatePixelRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: Optional http(s) URL of the page this pixel tracks.
+        tags:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 40
+            pattern: "^[a-z0-9._-]+$"
+          description: Optional tags; lowercased and de-duplicated server-side.
+
+    PixelDelete:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        deleted_at: { type: string, format: date-time }
+        purge_at:
+          type: string
+          format: date-time
+          description: When the pixel's data will be permanently expunged (deleted_at + 30 days).
 
     Stats:
       type: object
@@ -224,6 +355,15 @@ components:
       properties:
         count: { type: integer }
 
+    PageMeta:
+      type: object
+      properties:
+        count:  { type: integer, description: "Items in this page." }
+        total:  { type: integer, format: int64, description: "Total matches across all pages." }
+        limit:  { type: integer }
+        offset: { type: integer }
+        sort:   { type: string }
+
     # Envelopes
     MeEnvelope:
       type: object
@@ -243,7 +383,11 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/Pixel" }
-        meta: { $ref: "#/components/schemas/ListMeta" }
+        meta: { $ref: "#/components/schemas/PageMeta" }
+    PixelDeleteEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/PixelDelete" }
     StatsEnvelope:
       type: object
       properties:

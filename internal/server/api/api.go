@@ -43,7 +43,9 @@ func (h *Handler) Register(g *echo.Group) {
 	v1.GET("/org", h.handleOrg)
 
 	v1.GET("/pixels", h.handleListPixels)
+	v1.POST("/pixels", h.handleCreatePixel)
 	v1.GET("/pixels/:id", h.handleGetPixel)
+	v1.DELETE("/pixels/:id", h.handleDeletePixel)
 	v1.GET("/pixels/:id/stats", h.handlePixelStats)
 	v1.GET("/pixels/:id/timeseries", h.handlePixelTimeseries)
 

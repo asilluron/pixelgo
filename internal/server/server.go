@@ -130,6 +130,7 @@ func (s *Server) routes() {
 	admin.GET("", s.handleDashboard)
 	admin.GET("/", s.handleDashboard)
 	admin.POST("/pixels", s.handleCreatePixel)
+	admin.POST("/pixels/:id/delete", s.handleDeletePixel)
 	admin.POST("/invites", s.handleCreateInvite)
 	admin.POST("/api-keys", s.handleCreateAPIKey)
 	admin.POST("/api-keys/:id/revoke", s.handleRevokeAPIKey)
