@@ -16,6 +16,7 @@
         <span class="text-xs text-slate-400">admin</span>
       </div>
       <div class="flex items-center gap-3 text-sm text-slate-300">
+        <a href="/docs" class="text-slate-400 hover:text-white">API docs</a>
         <span>{{ .User.Email }}</span>
         <span class="px-2 py-0.5 rounded-full text-xs border border-slate-700 bg-slate-800">
           {{ if .IsSuper }}super_admin{{ else }}{{ .User.Role }}{{ end }}
@@ -44,10 +45,38 @@
     </section>
 
     <section>
-      <h2 class="text-lg font-semibold mb-4">Pixels</h2>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 class="text-lg font-semibold">Pixels</h2>
+        {{ with .Catalog }}
+        <form method="get" action="/admin" class="flex flex-wrap items-center gap-2 text-sm">
+          <input name="q" value="{{ .Query }}" placeholder="Search by name…"
+            class="w-48 rounded-md bg-slate-900 border border-slate-700 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <select name="sort" onchange="this.form.submit()"
+            class="rounded-md bg-slate-900 border border-slate-700 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="views" {{ if eq .Sort "views" }}selected{{ end }}>Most views</option>
+            <option value="newest" {{ if eq .Sort "newest" }}selected{{ end }}>Newest</option>
+            <option value="oldest" {{ if eq .Sort "oldest" }}selected{{ end }}>Oldest</option>
+            <option value="name_asc" {{ if eq .Sort "name_asc" }}selected{{ end }}>Name A→Z</option>
+            <option value="name_desc" {{ if eq .Sort "name_desc" }}selected{{ end }}>Name Z→A</option>
+          </select>
+          <button class="rounded-md border border-slate-700 hover:border-slate-500 px-3 py-1.5 text-sm">Filter</button>
+          {{ if .Filtered }}
+          <a href="/admin" class="text-xs text-slate-400 hover:text-white">clear</a>
+          {{ end }}
+        </form>
+        {{ end }}
+      </div>
+      {{ with .Catalog }}{{ if .Tag }}
+      <p class="mb-3 text-xs text-slate-400">
+        Filtering by tag
+        <span class="px-1.5 py-0.5 rounded border border-indigo-500/50 bg-indigo-600/20 text-indigo-200 font-mono">{{ .Tag }}</span>
+      </p>
+      {{ end }}{{ end }}
       {{ if not .Stats }}
         <p class="text-sm text-slate-400">
-          {{ if .CanEdit }}No pixels yet. Create one below.{{ else }}No pixels yet.{{ end }}
+          {{ if and .Catalog .Catalog.Filtered }}No pixels match your filters.
+          {{ else if .CanEdit }}No pixels yet. Create one below.
+          {{ else }}No pixels yet.{{ end }}
         </p>
       {{ else }}
       {{ $host := .Host }}{{ $scheme := .Scheme }}{{ $names := .OrgNames }}
@@ -60,6 +89,20 @@
               <div class="text-xs text-slate-500 font-mono truncate">{{ .Pixel.ID }}</div>
               {{ if $.IsSuper }}
               <div class="text-xs text-slate-400 mt-1">{{ index $names .Pixel.OrgID }}</div>
+              {{ end }}
+              {{ if .Pixel.URL }}
+              <div class="text-xs text-slate-400 truncate mt-1">
+                tracks <a href="{{ .Pixel.URL }}" rel="noopener noreferrer" target="_blank"
+                          class="text-indigo-300 hover:text-indigo-200 underline decoration-slate-600">{{ .Pixel.URL }}</a>
+              </div>
+              {{ end }}
+              {{ if .Pixel.Tags }}
+              <div class="flex flex-wrap gap-1 mt-1.5">
+                {{ range .Pixel.Tags }}
+                <a href="/admin?tag={{ . }}"
+                   class="px-1.5 py-0.5 rounded text-[10px] border border-slate-700 bg-slate-800 text-slate-300 hover:border-indigo-500 hover:text-indigo-200 font-mono">{{ . }}</a>
+                {{ end }}
+              </div>
               {{ end }}
               <div class="hidden md:block text-xs text-slate-500 font-mono truncate mt-1"
                    title="{{ $scheme }}://{{ $host }}/p/{{ .Pixel.ID }}">
@@ -79,6 +122,12 @@
                 <div class="text-[10px] uppercase tracking-wide text-slate-500">All-time</div>
                 <div class="text-lg font-semibold">{{ commas .Total }}</div>
               </div>
+              {{ if $.CanEdit }}
+              <form method="post" action="/admin/pixels/{{ .Pixel.ID }}/delete" class="self-start"
+                    onsubmit="return confirm('Delete this pixel? It stops tracking immediately and its data is permanently removed after 30 days.')">
+                <button class="text-xs text-slate-500 hover:text-red-400" title="Delete pixel">Delete</button>
+              </form>
+              {{ end }}
             </div>
           </div>
           <div class="bg-slate-950 px-5 py-4">
@@ -103,6 +152,19 @@
         </article>
         {{ end }}
       </div>
+      {{ end }}
+      {{ with .Catalog }}
+      {{ if gt .TotalPages 1 }}
+      <nav class="mt-5 flex items-center justify-between text-sm text-slate-400" aria-label="Pixel pages">
+        <div>
+          {{ if .PrevURL }}<a href="{{ .PrevURL }}" class="rounded-md border border-slate-700 hover:border-slate-500 px-3 py-1.5">← Prev</a>{{ end }}
+        </div>
+        <span class="text-xs">Page {{ .Page }} of {{ .TotalPages }} · {{ .Total }} pixels</span>
+        <div>
+          {{ if .NextURL }}<a href="{{ .NextURL }}" class="rounded-md border border-slate-700 hover:border-slate-500 px-3 py-1.5">Next →</a>{{ end }}
+        </div>
+      </nav>
+      {{ end }}
       {{ end }}
     </section>
 
@@ -152,10 +214,17 @@
 
     {{ if .CanEdit }}
     <section class="rounded-xl border border-slate-800 bg-slate-900 p-6">
-      <h2 class="text-lg font-semibold mb-4">Create pixel</h2>
+      <h2 class="text-lg font-semibold mb-1">Create pixel</h2>
+      <p class="text-xs text-slate-400 mb-4">
+        Name is all you need — add the tracked page URL and tags to keep large catalogs sortable.
+      </p>
       <form method="post" action="/admin/pixels" class="flex flex-wrap gap-2">
-        <input name="name" placeholder="Homepage hero" required
+        <input name="name" placeholder="Product page — blue widget" required
           class="flex-1 min-w-[12rem] rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <input name="url" type="url" placeholder="https://shop.example.com/products/blue-widget (optional)"
+          class="flex-1 min-w-[16rem] rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <input name="tags" placeholder="tags: products, launch (optional)"
+          class="min-w-[12rem] rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         {{ if .IsSuper }}
         <select name="org_id" required
           class="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -174,7 +243,7 @@
     <section class="rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-4">
       <div class="flex items-baseline justify-between">
         <h2 class="text-lg font-semibold">API keys</h2>
-        <a href="https://github.com/asilluron/pixelgo#api" class="text-xs text-slate-400 hover:text-slate-200">docs →</a>
+        <a href="/docs" class="text-xs text-slate-400 hover:text-slate-200">docs →</a>
       </div>
 
       {{ if .NewKey }}

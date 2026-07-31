@@ -99,9 +99,10 @@ are needed.
 
 ## API
 
-Read-only v1 lives under `/api/v1`. Full contract in
+v1 lives under `/api/v1`. Full contract in
 [`api/openapi.yaml`](./api/openapi.yaml); a Swagger UI is mounted at
-[`/docs`](http://localhost:8080/docs) on any running instance.
+[`/docs`](http://localhost:8080/docs) on any running instance (also linked
+from the admin dashboard header).
 
 ### Authentication
 
@@ -123,11 +124,31 @@ token is shown once on creation and never stored.
 | ------ | ---- | ----- |
 | `GET` | `/api/v1/me` | Resolve the caller's token + org |
 | `GET` | `/api/v1/org` | Org record the token is scoped to |
-| `GET` | `/api/v1/pixels` | List pixels in the caller's org |
+| `GET` | `/api/v1/pixels` | Catalog listing: `q` (name prefix), `tag`, `status=active\|deleted`, `sort`, `limit`, `offset` |
+| `POST` | `/api/v1/pixels` | Create a pixel dynamically (`name` required; optional `url`, `tags`) |
 | `GET` | `/api/v1/pixels/{id}` | Single pixel metadata |
+| `DELETE` | `/api/v1/pixels/{id}` | Soft delete: stops counting immediately, expunged after 30 days |
 | `GET` | `/api/v1/pixels/{id}/stats` | Lifetime / today / last-hour counters |
 | `GET` | `/api/v1/pixels/{id}/timeseries` | Per-bucket counts (`granularity=hour\|day`, `window=N`) |
 | `GET` | `/api/v1/pixels:batchStats?ids=a,b,c` | Bulk counters (≤200 ids) |
+
+Write endpoints (`POST`/`DELETE`) require an org key or a personal key whose
+owner has the owner/editor role; viewer keys are read-only.
+
+### Deletion & retention
+
+`DELETE /api/v1/pixels/{id}` (or the dashboard's Delete button) is a soft
+delete: the pixel vanishes from live listings and its `/p/{id}` hits stop
+counting immediately. Metadata and counters are retained for 30 days —
+inspect them with `GET /api/v1/pixels?status=deleted` — then a background
+worker permanently expunges everything.
+
+### Catalog at scale
+
+Listing is backed by Redis sorted-set indexes (created-at, lexicographic
+name, per-tag), so sort/filter/pagination stay O(log N + page) even for orgs
+with thousands of pixels. The dashboard exposes the same catalog: search,
+tag filter, five sort orders, and 20-per-page pagination.
 
 Responses are wrapped:
 
@@ -183,7 +204,7 @@ natural next steps:
 
 - Redis-backed token bucket rate limiting on `/api/v1/*` (per key rather
   than per IP) — currently unlimited.
-- Write endpoints (`POST /api/v1/pixels`, `DELETE`, rename) — v1 is read-only.
+- Pixel rename + restore-from-soft-delete endpoints.
 - Webhooks on configurable thresholds.
 - Long-term aggregate storage (e.g. a Postgres rollup replica) for windows
   older than the Redis TTLs (72 h hourly, 35 d daily).

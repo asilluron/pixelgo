@@ -16,6 +16,7 @@ const (
 	ctxAPIKey = "api_key"
 	ctxOrgID  = "api_org_id"
 	ctxUserID = "api_user_id"
+	ctxRole   = "api_role"
 )
 
 // requireAPIKey authenticates the bearer token and attaches the resolved
@@ -53,13 +54,14 @@ func (h *Handler) requireAPIKey(next echo.HandlerFunc) echo.HandlerFunc {
 			return unauthorized(c, "invalid token")
 		}
 
-		orgID, userID, err := h.resolveScope(c, matched)
+		orgID, userID, role, err := h.resolveScope(c, matched)
 		if err != nil {
 			return err
 		}
 		c.Set(ctxAPIKey, *matched)
 		c.Set(ctxOrgID, orgID)
 		c.Set(ctxUserID, userID)
+		c.Set(ctxRole, role)
 
 		// Telemetry is best-effort — never block the request on an audit write.
 		// Detach from the request context so client disconnect doesn't drop it.
@@ -73,24 +75,26 @@ func (h *Handler) requireAPIKey(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-// resolveScope returns the effective (orgID, userID) for a key. Personal keys
-// derive org from the owner's current membership, so a revoked membership
-// silently de-authorizes the key. Org keys are self-scoped.
-func (h *Handler) resolveScope(c echo.Context, k *models.APIKey) (string, string, error) {
+// resolveScope returns the effective (orgID, userID, role) for a key.
+// Personal keys derive org + role from the owner's current membership, so a
+// revoked membership silently de-authorizes the key and a viewer membership
+// caps the key at read-only. Org keys are self-scoped and act as owner-level
+// credentials for their org.
+func (h *Handler) resolveScope(c echo.Context, k *models.APIKey) (string, string, models.Role, error) {
 	switch k.Type {
 	case models.APIKeyTypeOrg:
-		return k.OrgID, "", nil
+		return k.OrgID, "", models.RoleOwner, nil
 	case models.APIKeyTypePersonal:
-		orgID, _, err := h.deps.Auth.GetMembershipForUser(c.Request().Context(), k.UserID)
+		orgID, role, err := h.deps.Auth.GetMembershipForUser(c.Request().Context(), k.UserID)
 		if errors.Is(err, store.ErrNotFound) || orgID == "" {
-			return "", "", forbidden(c, "key owner has no active org membership")
+			return "", "", "", forbidden(c, "key owner has no active org membership")
 		}
 		if err != nil {
-			return "", "", internal(c, err)
+			return "", "", "", internal(c, err)
 		}
-		return orgID, k.UserID, nil
+		return orgID, k.UserID, role, nil
 	default:
-		return "", "", unauthorized(c, "invalid token")
+		return "", "", "", unauthorized(c, "invalid token")
 	}
 }
 
@@ -132,4 +136,10 @@ func orgID(c echo.Context) string {
 func userID(c echo.Context) string {
 	s, _ := c.Get(ctxUserID).(string)
 	return s
+}
+
+// role returns the caller's effective role within the scoped org.
+func role(c echo.Context) models.Role {
+	r, _ := c.Get(ctxRole).(models.Role)
+	return r
 }

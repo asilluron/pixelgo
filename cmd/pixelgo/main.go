@@ -34,6 +34,12 @@ func main() {
 	}
 	defer func() { _ = rs.Close() }()
 
+	// Backfill catalog indexes for pixels created before the index schema
+	// existed. Versioned — a single GET on every boot after the first.
+	if err := rs.ReindexPixels(ctx); err != nil {
+		log.Fatalf("pixel reindex: %v", err)
+	}
+
 	ps, err := store.NewPostgres(ctx, cfg.SupabaseDBURL)
 	if err != nil {
 		log.Fatalf("postgres: %v", err)
@@ -62,6 +68,14 @@ func main() {
 		log.Fatalf("server: %v", err)
 	}
 
+	// Retention worker: permanently expunges pixels soft-deleted more than
+	// 30 days ago (models.PixelDeleteRetention). Hourly cadence is plenty —
+	// the deadline is measured in days — and each run is index-driven
+	// (ZRANGEBYSCORE on the purge queue), so idle runs cost one Redis call.
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	defer stopWorker()
+	go runExpungeWorker(workerCtx, rs)
+
 	errCh := make(chan error, 1)
 	go func() {
 		log.Printf("pixelgo listening on %s (env=%s)", cfg.Addr, cfg.Env)
@@ -83,6 +97,37 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("shutdown: %v", err)
+	}
+}
+
+// runExpungeWorker drains the soft-delete purge queue once at boot and then
+// hourly until ctx is cancelled. Failures are logged and retried on the next
+// tick — an expunge that runs late is harmless; the data is already
+// invisible and uncounted from the moment it was soft-deleted.
+func runExpungeWorker(ctx context.Context, pixels store.PixelStore) {
+	run := func() {
+		runCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		n, err := pixels.ExpungeDuePixels(runCtx, time.Now().UTC())
+		if err != nil {
+			log.Printf("expunge worker: %v", err)
+			return
+		}
+		if n > 0 {
+			log.Printf("expunge worker: permanently removed %d pixel(s)", n)
+		}
+	}
+
+	run()
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
 	}
 }
 

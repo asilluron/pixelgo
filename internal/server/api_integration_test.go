@@ -150,6 +150,123 @@ func TestAPIKeyRoundtrip(t *testing.T) {
 		t.Fatalf("stats pixel_id = %q, want %q", stats.Data.PixelID, pixelID)
 	}
 
+	// --- Dynamic creation via the API (quick pixel for a product page) ---
+	var created struct {
+		Data struct {
+			ID    string   `json:"id"`
+			OrgID string   `json:"org_id"`
+			Name  string   `json:"name"`
+			URL   string   `json:"url"`
+			Tags  []string `json:"tags"`
+		} `json:"data"`
+	}
+	apiDoJSON(t, http.MethodPost, ts.URL+"/api/v1/pixels", token,
+		`{"name":"ci-product-page","url":"https://shop.example.com/products/1","tags":["Products","launch"]}`,
+		http.StatusCreated, &created)
+	if created.Data.ID == "" || created.Data.OrgID != orgID {
+		t.Fatalf("create = %+v, want id set + org %s", created.Data, orgID)
+	}
+	if created.Data.URL != "https://shop.example.com/products/1" {
+		t.Fatalf("create url = %q", created.Data.URL)
+	}
+	// Tags are normalized to lowercase.
+	if len(created.Data.Tags) != 2 || created.Data.Tags[0] != "products" || created.Data.Tags[1] != "launch" {
+		t.Fatalf("create tags = %v, want [products launch]", created.Data.Tags)
+	}
+	createdID := created.Data.ID
+
+	// Validation: bad URL rejected.
+	res := apiDo(t, http.MethodPost, ts.URL+"/api/v1/pixels", token, `{"name":"bad","url":"ftp://nope"}`)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad url create = %d, want 400", res.StatusCode)
+	}
+
+	// --- Catalog: filter + sort + paginate ---
+	type pageResp struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"data"`
+		Meta struct {
+			Count int   `json:"count"`
+			Total int64 `json:"total"`
+		} `json:"meta"`
+	}
+	var page pageResp
+	apiGetJSON(t, ts.URL+"/api/v1/pixels?tag=products", token, http.StatusOK, &page)
+	if page.Meta.Total != 1 || page.Data[0].ID != createdID {
+		t.Fatalf("tag filter = %+v, want just %s", page, createdID)
+	}
+	apiGetJSON(t, ts.URL+"/api/v1/pixels?q=ci-product", token, http.StatusOK, &page)
+	if page.Meta.Total != 1 || page.Data[0].ID != createdID {
+		t.Fatalf("prefix filter = %+v, want just %s", page, createdID)
+	}
+	apiGetJSON(t, ts.URL+"/api/v1/pixels?sort=name_asc", token, http.StatusOK, &page)
+	if page.Meta.Total != 2 || page.Data[0].Name != "ci-pixel" || page.Data[1].Name != "ci-product-page" {
+		t.Fatalf("name_asc = %+v, want [ci-pixel ci-product-page]", page)
+	}
+	apiGetJSON(t, ts.URL+"/api/v1/pixels?sort=name_asc&limit=1&offset=1", token, http.StatusOK, &page)
+	if page.Meta.Count != 1 || page.Meta.Total != 2 || page.Data[0].ID != createdID {
+		t.Fatalf("paginated page 2 = %+v, want just %s", page, createdID)
+	}
+	res = apiGet(t, ts.URL+"/api/v1/pixels?q=x&tag=y", token)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("q+tag combo = %d, want 400", res.StatusCode)
+	}
+
+	// --- Soft delete: 30-day retention window ---
+	var del struct {
+		Data struct {
+			ID        string     `json:"id"`
+			DeletedAt *time.Time `json:"deleted_at"`
+			PurgeAt   *time.Time `json:"purge_at"`
+		} `json:"data"`
+	}
+	apiDoJSON(t, http.MethodDelete, ts.URL+"/api/v1/pixels/"+createdID, token, "", http.StatusOK, &del)
+	if del.Data.DeletedAt == nil || del.Data.PurgeAt == nil {
+		t.Fatalf("delete = %+v, want deleted_at and purge_at set", del.Data)
+	}
+	if got := del.Data.PurgeAt.Sub(*del.Data.DeletedAt); got != 30*24*time.Hour {
+		t.Fatalf("purge window = %v, want 720h", got)
+	}
+	// Idempotent: second delete returns the same deleted_at.
+	var again struct {
+		Data struct {
+			DeletedAt *time.Time `json:"deleted_at"`
+		} `json:"data"`
+	}
+	apiDoJSON(t, http.MethodDelete, ts.URL+"/api/v1/pixels/"+createdID, token, "", http.StatusOK, &again)
+	if !again.Data.DeletedAt.Equal(*del.Data.DeletedAt) {
+		t.Fatalf("second delete moved deleted_at: %v vs %v", again.Data.DeletedAt, del.Data.DeletedAt)
+	}
+	// Gone from live listings…
+	apiGetJSON(t, ts.URL+"/api/v1/pixels", token, http.StatusOK, &page)
+	if page.Meta.Total != 1 || page.Data[0].Name != "ci-pixel" {
+		t.Fatalf("live list after delete = %+v, want just ci-pixel", page)
+	}
+	// …but visible in the deleted view until expunge.
+	apiGetJSON(t, ts.URL+"/api/v1/pixels?status=deleted", token, http.StatusOK, &page)
+	if page.Meta.Total != 1 || page.Data[0].ID != createdID {
+		t.Fatalf("deleted list = %+v, want just %s", page, createdID)
+	}
+	// Hot path stops counting a deleted pixel.
+	if _, err := http.Get(ts.URL + "/p/" + createdID); err != nil {
+		t.Fatalf("GET /p/ deleted: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond) // increment is async; give it time to (not) land
+	if n, err := rs.GetPixelCount(ctx, createdID); err != nil || n != 0 {
+		t.Fatalf("deleted pixel count = (%d, %v), want (0, nil)", n, err)
+	}
+
+	// --- Docs stay reachable from the logged-in dashboard menu ---
+	dash := mustGet(t, client, ts.URL+"/admin")
+	body, _ := io.ReadAll(dash.Body)
+	if !strings.Contains(string(body), `href="/docs"`) {
+		t.Fatalf("dashboard missing API docs link")
+	}
+
 	// Revoke via the admin route. Look up the key id from the DB (we don't
 	// get it back on the mint redirect).
 	var keyID string
@@ -162,7 +279,7 @@ func TestAPIKeyRoundtrip(t *testing.T) {
 	postForm(t, client, ts.URL+"/admin/api-keys/"+keyID+"/revoke", url.Values{}, "/admin")
 
 	// The same token should now 401 — the prefix-lookup filters on revoked_at.
-	res := apiGet(t, ts.URL+"/api/v1/me", token)
+	res = apiGet(t, ts.URL+"/api/v1/me", token)
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("after revoke, /me = %d, want 401", res.StatusCode)
@@ -193,6 +310,39 @@ func mintKey(t *testing.T, client *http.Client, base, name, typ string) string {
 		t.Fatalf("no new_key in redirect: %s", res.Header.Get("Location"))
 	}
 	return tok
+}
+
+// apiDo issues an authenticated request with an optional JSON body.
+func apiDo(t *testing.T, method, u, token, body string) *http.Response {
+	t.Helper()
+	var rdr io.Reader
+	if body != "" {
+		rdr = strings.NewReader(body)
+	}
+	req, _ := http.NewRequest(method, u, rdr)
+	req.Header.Set("Authorization", "Bearer "+token)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, u, err)
+	}
+	return res
+}
+
+// apiDoJSON is apiDo + status assertion + JSON decode.
+func apiDoJSON(t *testing.T, method, u, token, body string, wantStatus int, into any) {
+	t.Helper()
+	res := apiDo(t, method, u, token, body)
+	defer res.Body.Close()
+	if res.StatusCode != wantStatus {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("%s %s = %d, want %d; body=%s", method, u, res.StatusCode, wantStatus, b)
+	}
+	if err := json.NewDecoder(res.Body).Decode(into); err != nil {
+		t.Fatalf("decode %s %s: %v", method, u, err)
+	}
 }
 
 // apiGet issues an authenticated GET against the JSON API.

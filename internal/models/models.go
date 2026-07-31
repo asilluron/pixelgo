@@ -80,11 +80,32 @@ type Invite struct {
 }
 
 // Pixel is the tracked asset. The ID is what appears in the /p/{id} URL.
+// URL and Tags are optional catalog metadata: URL records the page the pixel
+// tracks (e.g. a product page) and Tags let large accounts group and filter
+// pixels. A non-nil DeletedAt marks the pixel soft-deleted; it stops counting
+// hits immediately and is expunged PixelDeleteRetention after that timestamp.
 type Pixel struct {
-	ID        string    `json:"id"`
-	OrgID     string    `json:"org_id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"id"`
+	OrgID     string     `json:"org_id"`
+	Name      string     `json:"name"`
+	URL       string     `json:"url,omitempty"`
+	Tags      []string   `json:"tags,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+}
+
+// PixelDeleteRetention is how long a soft-deleted pixel (and its counters)
+// is retained before the expunge worker permanently removes it.
+const PixelDeleteRetention = 30 * 24 * time.Hour
+
+// PurgeAt returns when a soft-deleted pixel becomes eligible for expunge,
+// or nil if the pixel is live.
+func (p Pixel) PurgeAt() *time.Time {
+	if p.DeletedAt == nil {
+		return nil
+	}
+	t := p.DeletedAt.Add(PixelDeleteRetention)
+	return &t
 }
 
 // PixelStat couples a pixel with its counters for admin listings.
