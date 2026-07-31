@@ -270,12 +270,18 @@ components:
 
     Me:
       type: object
+      required: [key_id, key_type, key_name, org_id, issued_at]
       properties:
         key_id:    { type: string, format: uuid }
         key_type:  { type: string, enum: [personal, org] }
         key_name:  { type: string }
         org_id:    { type: string, format: uuid }
-        user_id:   { type: string, format: uuid, nullable: true }
+        user_id:
+          type: string
+          format: uuid
+          description: |
+            Owner of a personal key. Omitted entirely for org keys, which
+            are not tied to a user.
         issued_at: { type: string, format: date-time }
 
     Org:
